@@ -1,2 +1,68 @@
 ---
-# tasks file for jetty
+
+- name: get java version
+  shell: "java -version 2>&1"
+  register: java_version_result
+  changed_when: false
+
+- name: test java version
+  fail:
+      msg: "jetty requires java version {{ java_version }} or higher"
+  when: "'{{ java_version }}' not in java_version_result.stdout"
+
+# NOTE: remove filename (or anything else) if it is included after the checksum
+- name: get jetty checksum
+  set_fact:
+    jetty_checksum: "{{ item | regex_replace('\\s+.*', '') }}"
+  with_url: "{{ jetty_checksum_url }}"
+
+- name: get jetty
+  get_url:
+    url:      "{{ jetty_url }}"
+    dest:     "{{ jetty_download_dir }}"
+    checksum: "{{ jetty_checksum_algorithm }}:{{ jetty_checksum }}"
+  register: got_jetty
+
+- name: exract jetty
+  unarchive:
+    src:        "{{ jetty_download_dir }}/{{ jetty_download_file }}"
+    dest:       "{{ jetty_install_dir }}"
+    remote_src: yes
+  become: true
+  # when: got_jetty.changed
+
+- name: symlink jetty
+  file:
+    src:    "{{ jetty_install_dir }}/{{ jetty_dir }}"
+    dest:   "{{ jetty_home }}"
+    state:  link
+  become: true
+
+- name: set jetty home environment var
+  lineinfile:
+    dest:   "/etc/profile.d/jetty.sh"
+    regexp: "^export JETTY_HOME="
+    line:   "export JETTY_HOME={{ jetty_home }}"
+    state:  present
+    create: yes
+  become: true
+
+- name: set jetty base environment var
+  lineinfile:
+    dest:   "/etc/profile.d/jetty.sh"
+    regexp: "^export JETTY_BASE="
+    line:   "export JETTY_BASE={{ jetty_base }}"
+    state:  present
+    create: yes
+  become: true
+
+# - name: get jetty version
+#   shell:   "jetty --version"
+#   register: jetty_version_result
+#   changed_when: false
+#   become: false
+#
+# - name: test jetty version
+#   fail:
+#     msg: "attempted to install jetty {{ jetty_version }}, but something went wrong"
+#   when: "'{{ jetty_version }}' not in jetty_version_result.stdout"
