@@ -10,6 +10,21 @@
       msg: "jetty requires java version {{ java_version }} or higher"
   when: "'{{ java_version }}' not in java_version_result.stdout"
 
+- name: add jetty group
+  group:
+    name: "{{ jetty_group }}"
+    gid:  "{{ jetty_group_gid | default(omit) }}"
+    state: present
+  become: true
+
+- name: add jetty user
+  user:
+    name: "{{ jetty_user }}"
+    shell: "/bin/bash"
+    uid:    "{{ jetty_user_uid  | default(omit) }}"
+    group:  "{{ jetty_group  }}"
+  become: true
+
 # NOTE: remove filename (or anything else) if it is included after the checksum
 - name: get jetty checksum
   set_fact:
@@ -27,9 +42,11 @@
   unarchive:
     src:        "{{ jetty_download_dir }}/{{ jetty_download_file }}"
     dest:       "{{ jetty_install_dir }}"
+    owner:      "{{ jetty_user }}"
+    group:      "{{ jetty_group }}"
     remote_src: yes
   become: true
-  # when: got_jetty.changed
+  when: got_jetty.changed
 
 - name: symlink jetty
   file:
@@ -38,6 +55,16 @@
     state:  link
   become: true
 
+- name: make sure jetty base exists
+  file:
+    path: "{{ jetty_base }}"
+    owner: "{{ jetty_user }}" # "{{ ansible_env.USER }}"
+    group: "{{ jetty_group }}" # "{{ ansible_env.USER }}"
+    state: directory
+    recurse: true
+  become: true
+
+# necessary, with environment vars set by the service configuration?
 - name: set jetty home environment var
   lineinfile:
     dest:   "/etc/profile.d/jetty.sh"
@@ -56,13 +83,59 @@
     create: yes
   become: true
 
-# - name: get jetty version
-#   shell:   "jetty --version"
-#   register: jetty_version_result
-#   changed_when: false
-#   become: false
-#
-# - name: test jetty version
-#   fail:
-#     msg: "attempted to install jetty {{ jetty_version }}, but something went wrong"
-#   when: "'{{ jetty_version }}' not in jetty_version_result.stdout"
+- name: test jetty with demo-base
+  shell: "cp -R {{ jetty_home }}/demo-base/* {{ jetty_base }}"
+  become: true
+  become_user:  "{{ jetty_user }}"
+  when: jetty_test
+
+- block:
+  - name: create jetty start.d
+    command: "java -jar {{ jetty_home }}/start.jar --create-startd"
+    register: startd_result
+    args:
+      chdir: "{{ jetty_base }}"
+    changed_when: "'Base directory was modified' in startd_result.stdout"
+
+  - name: add jetty modules
+    command: "java -jar {{ jetty_home }}/start.jar --add-to-start={{ jetty_modules }}"
+    register: modules_result
+    args:
+      chdir: "{{ jetty_base }}"
+    become: true
+    become_user:  "{{ jetty_user }}"
+    changed_when: "'Base directory was modified' in modules_result.stdout"
+  when: not jetty_test
+
+- name: create jetty service directory for additional configuration
+  file:
+    path: "/etc/systemd/system/jetty.service.d"
+    state: directory
+  become: true
+
+- name: set jetty service vars
+  template:
+    src: "jetty.conf.j2"
+    dest: "/etc/systemd/system/jetty.service.d/jetty.conf"
+  become: true
+  notify: restart jetty
+
+- name: configure jetty service
+  template:
+    src: "jetty.service.j2"
+    dest: "/etc/systemd/system/jetty.service"
+  become: true
+  notify: restart jetty
+
+- name: flush handlers after configuring
+  meta: flush_handlers
+
+- name: wait for jetty to start
+  wait_for:
+    port: "{{ jetty_port }}"
+
+- name: check if jetty service is running
+  command: systemctl is-active jetty
+  register: jetty_status
+  failed_when: "'active' not in jetty_status.stdout"
+  changed_when: false

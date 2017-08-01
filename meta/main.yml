@@ -1,6 +1,6 @@
 galaxy_info:
   author: Drew Heles
-  description: Installs the Jetty web server
+  description: Installs and configures the Jetty web server
 
   license: CC0
 

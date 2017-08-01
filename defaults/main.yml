@@ -14,5 +14,12 @@ jetty_checksum_algorithm: "sha1"
 jetty_checksum_url:       "{{ jetty_url }}.{{ jetty_checksum_algorithm }}"
 jetty_user:               "jetty"
 jetty_group:              "{{ jetty_user }}"
+jetty_port:               8080
 jetty_home:               "{{ jetty_install_dir }}/jetty"
 jetty_base:               "/opt/jetty"
+# TODO: configure better logging
+jetty_modules:            "http,deploy,console-capture,logging-jetty"
+jetty_debugging:          "{{ debugging | default(false) }}"
+jetty_test:               true
+java_opts:                "-Xms512m
+                           -Xmx512m"

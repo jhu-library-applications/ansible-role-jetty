@@ -1,13 +1,14 @@
 Ansible Role: Jetty
 =========
 
-Installs the [Jetty web server](https://www.eclipse.org/jetty/)
+Installs and configures the [Jetty web server](https://www.eclipse.org/jetty/)
 
 
 WIP Notice
 ----------
 
-just getting started...
+TODO: configure better logging
+TODO: configure contexts
 
 
 Requirements
